@@ -87,7 +87,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
-const GEMINI_KEY = 'AQ.Ab8RN6IeLcVcFmLo-dPHjblEFBYj7GLLMGlLsgyBTE3YwHYtSA';
+const GEMINI_KEY = 'AQ.Ab8RN6J56AVa6v45mekT4Sagn4waG5qBeKne4SYcoFMszIA-Vw';
 const GEMINI_MODEL = 'gemini-flash-latest';
 const KEY = () => cfg.key || GEMINI_KEY;
 const cfg = { key: store.get('key', ''), voice: store.get('voice', true), needWake: store.get('needWake', false), wake: store.get('wake', 'nova') };
