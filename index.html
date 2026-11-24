@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nova</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nova">
+<meta name="theme-color" content="#05050a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root { --safe-t: env(safe-area-inset-top); --safe-b: env(safe-area-inset-bottom); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  html, body { margin: 0; height: 100%; background: #05050a; overflow: hidden; overscroll-behavior: none;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif; color: #fff; }
+  body { position: fixed; inset: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  #status { position: absolute; left: 0; right: 0; top: calc(var(--safe-t) + 22px); text-align: center;
+    font-size: 11px; letter-spacing: .38em; font-weight: 600; color: rgba(255,255,255,.55); transition: color .5s; pointer-events: none; }
+  #heard { position: absolute; left: 24px; right: 24px; top: 63%; text-align: center; font-size: 17px; font-weight: 300;
+    color: rgba(255,255,255,.5); min-height: 24px; letter-spacing: .01em; pointer-events: none; transition: opacity .3s; }
+  #caption { position: absolute; left: 28px; right: 28px; top: 68%; bottom: calc(var(--safe-b) + 40px); text-align: center;
+    font-size: clamp(21px, 5.8vw, 30px); font-weight: 300; line-height: 1.3; letter-spacing: -.01em;
+    opacity: 0; transform: translateY(8px); transition: opacity .6s ease, transform .6s ease; pointer-events: none;
+    overflow: hidden; display: flex; align-items: flex-start; justify-content: center; }
+  #caption.show { opacity: 1; transform: none; }
+  #caption span { background: linear-gradient(180deg, #fff 30%, rgba(255,255,255,.78)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  #pill { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 34px); transform: translate(-50%, 20px); opacity: 0;
+    padding: 15px 28px; border-radius: 999px; color: #fff; text-decoration: none; font-weight: 600; font-size: 16px; letter-spacing: .01em;
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28);
+    -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+    transition: opacity .4s, transform .4s; pointer-events: none; white-space: nowrap; max-width: 88vw; overflow: hidden; text-overflow: ellipsis; }
+  #pill.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+
+  #gear { position: absolute; right: 10px; top: calc(var(--safe-t) + 6px); width: 44px; height: 44px; border: 0; background: none;
+    color: rgba(255,255,255,.35); font-size: 20px; }
+
+  #sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 22px calc(var(--safe-b) + 22px);
+    background: rgba(18,18,28,.82); -webkit-backdrop-filter: blur(30px) saturate(1.4); backdrop-filter: blur(30px) saturate(1.4);
+    border-top: 1px solid rgba(255,255,255,.12); border-radius: 26px 26px 0 0;
+    transform: translateY(105%); transition: transform .45s cubic-bezier(.2,.9,.25,1); }
+  #sheet.open { transform: none; }
+  #sheet h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+  #sheet label { display: block; margin: 16px 0 6px; font-size: 12px; color: rgba(255,255,255,.5); letter-spacing: .05em; text-transform: uppercase; }
+  #sheet input[type=text], #sheet input[type=password] { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.07); color: #fff; font-size: 16px; -webkit-user-select: text; user-select: text; outline: none; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 2px; font-size: 16px; }
+  .sw { position: relative; width: 51px; height: 31px; }
+  .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; z-index: 2; }
+  .sw i { position: absolute; inset: 0; border-radius: 99px; background: rgba(255,255,255,.18); transition: background .25s; }
+  .sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; transition: transform .25s; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+  .sw input:checked + i { background: #34c759; }
+  .sw input:checked + i::after { transform: translateX(20px); }
+  #done { margin-top: 22px; width: 100%; padding: 15px; border: 0; border-radius: 14px; font-size: 17px; font-weight: 600; color: #fff;
+    background: linear-gradient(135deg, #7c5cff, #29c7ff); }
+  #sheet small { display: block; margin-top: 8px; color: rgba(255,255,255,.4); font-size: 12px; line-height: 1.45; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="status">TAP TO START</div>
+<div id="heard"></div>
+<div id="caption"><span></span></div>
+<a id="pill" href="#"></a>
+<button id="gear" aria-label="Settings">⚙︎</button>
+
+<div id="sheet">
+  <h2>Settings</h2>
+  <label>Gemini API key (optional override)</label>
+  <input type="password" id="key" placeholder="Leave blank to use the built-in key" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <small>Nova already has a Gemini key built in. Paste a different one here only if you want to swap it. Stored only on this phone.</small>
+  <div class="row"><span>Speak answers</span><span class="sw"><input type="checkbox" id="voice"><i></i></span></div>
+  <div class="row"><span>Only respond to wake word</span><span class="sw"><input type="checkbox" id="needWake"><i></i></span></div>
+  <label>Wake word</label>
+  <input type="text" id="wake" placeholder="nova" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button id="done">Done</button>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const GEMINI_KEY = 'AQ.Ab8RN6IeLcVcFmLo-dPHjblEFBYj7GLLMGlLsgyBTE3YwHYtSA';
+const GEMINI_MODEL = 'gemini-flash-latest';
+const KEY = () => cfg.key || GEMINI_KEY;
+const cfg = { key: store.get('key', ''), voice: store.get('voice', true), needWake: store.get('needWake', false), wake: store.get('wake', 'nova') };
+
+/* ============================================================
+   VISUALS
+   ============================================================ */
+const cv = $('#c'), ctx = cv.getContext('2d');
+let W, H, DPR;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize(); addEventListener('resize', resize);
+
+let state = 'asleep';           // asleep | listening | thinking | speaking
+let t = 0, energy = 0.08, bump = 0, hue = 255, last = performance.now();
+const HUES = { asleep: 258, listening: 190, thinking: 318, speaking: 150 };
+const ripples = [];
+let rippleClock = 0;
+const parts = Array.from({ length: 90 }, () => ({
+  a: Math.random() * Math.PI * 2, r: 1.05 + Math.random() * 1.6, s: (Math.random() * .4 + .08) * (Math.random() < .5 ? -1 : 1),
+  z: Math.random() * 1.8 + .4, p: Math.random() * 6.28
+}));
+
+function blob(cx, cy, R, amp, k, speed, phase, h, alpha) {
+  const N = 140;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const n = Math.sin(a * k + t * speed + phase) * .55 + Math.sin(a * (k + 2) - t * speed * 1.37 + phase * 2) * .3 + Math.sin(a * (k + 5) + t * speed * .6) * .15;
+    const r = R * (1 + amp * n);
+    const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+  const g = ctx.createRadialGradient(cx, cy, R * .1, cx, cy, R * (1 + amp));
+  g.addColorStop(0, `hsla(${h},100%,72%,${alpha})`);
+  g.addColorStop(.7, `hsla(${h + 25},100%,55%,${alpha * .55})`);
+  g.addColorStop(1, `hsla(${h + 50},100%,45%,0)`);
+  ctx.fillStyle = g; ctx.fill();
+}
+
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now; t += dt;
+
+  // energy targets by state
+  let tgt;
+  if (state === 'asleep') tgt = .05 + .02 * Math.sin(t * 1.1);
+  else if (state === 'listening') tgt = .16 + .1 * Math.sin(t * 1.8) + bump * .6;
+  else if (state === 'thinking') tgt = .32 + .08 * Math.sin(t * 5);
+  else tgt = .42 + .38 * Math.abs(Math.sin(t * 7.1) * Math.sin(t * 2.9 + 1.3)) + .1 * Math.sin(t * 13);
+  bump *= Math.pow(.02, dt);                     // decay
+  energy += (tgt - energy) * Math.min(1, dt * 9);
+
+  let dh = ((HUES[state] - hue + 540) % 360) - 180;
+  hue = (hue + dh * Math.min(1, dt * 2.6) + 360) % 360;
+
+  const cx = W / 2, cy = H * .38;
+  const base = Math.min(W, H * .62) * .2;
+  const R = base * (1 + energy * .38 + (state === 'asleep' ? .03 * Math.sin(t * 1.1) : 0));
+
+  // background
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#05050a'; ctx.fillRect(0, 0, W, H);
+  const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * .8);
+  bg.addColorStop(0, `hsla(${hue},90%,${14 + energy * 16}%,${.55 + energy * .3})`);
+  bg.addColorStop(.55, `hsla(${hue + 30},80%,6%,.5)`);
+  bg.addColorStop(1, 'rgba(5,5,10,0)');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+  ctx.globalCompositeOperation = 'lighter';
+
+  // particles
+  for (const p of parts) {
+    p.a += p.s * dt * (.6 + energy * 2.2);
+    const rr = R * (p.r + .12 * Math.sin(t * p.z + p.p) + energy * .25);
+    const x = cx + Math.cos(p.a) * rr, y = cy + Math.sin(p.a) * rr * .96;
+    const al = (.12 + energy * .55) * (.5 + .5 * Math.sin(t * p.z * 1.6 + p.p));
+    ctx.fillStyle = `hsla(${hue + (p.p * 20) % 60},100%,75%,${al})`;
+    ctx.beginPath(); ctx.arc(x, y, p.z * (.8 + energy), 0, 6.283); ctx.fill();
+  }
+
+  // ripples
+  rippleClock += dt;
+  const gap = state === 'speaking' ? .5 : state === 'listening' ? 1.6 : state === 'thinking' ? 1.1 : 3.2;
+  if (rippleClock > gap) { rippleClock = 0; ripples.push({ born: t, life: state === 'asleep' ? 4 : 2.6 }); }
+  if (bump > .85 && (!ripples.length || t - ripples[ripples.length - 1].born > .35)) ripples.push({ born: t, life: 2.2 });
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const rp = ripples[i], k = (t - rp.born) / rp.life;
+    if (k >= 1) { ripples.splice(i, 1); continue; }
+    const e = 1 - Math.pow(1 - k, 3);
+    ctx.strokeStyle = `hsla(${hue + 20},100%,70%,${(1 - k) * .5})`;
+    ctx.lineWidth = 1.5 + (1 - k) * 2.5;
+    ctx.beginPath(); ctx.arc(cx, cy, R * (1.05 + e * 2.3), 0, 6.283); ctx.stroke();
+  }
+
+  // outer glow
+  const og = ctx.createRadialGradient(cx, cy, R * .6, cx, cy, R * (2.2 + energy));
+  og.addColorStop(0, `hsla(${hue},100%,60%,${.22 + energy * .25})`);
+  og.addColorStop(1, `hsla(${hue},100%,50%,0)`);
+  ctx.fillStyle = og; ctx.beginPath(); ctx.arc(cx, cy, R * (2.2 + energy), 0, 6.283); ctx.fill();
+
+  // blobs
+  const A = .1 + energy * .55;
+  blob(cx, cy, R * 1.0, A, 3, 1.1, 0, hue, .85);
+  blob(cx, cy, R * .94, A * 1.1, 4, -1.5, 2, hue + 40, .7);
+  blob(cx, cy, R * .86, A * 1.3, 5, 2.1, 4, hue - 35, .6);
+
+  // thinking ring
+  if (state === 'thinking') {
+    ctx.lineCap = 'round'; ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      const s = t * (2.6 + i * .7) * (i % 2 ? -1 : 1);
+      ctx.strokeStyle = `hsla(${hue + i * 30},100%,75%,${.75 - i * .15})`;
+      ctx.beginPath(); ctx.arc(cx, cy, R * (1.38 + i * .12), s, s + 1.3 - i * .2); ctx.stroke();
+    }
+  }
+
+  // bright core
+  const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * .62);
+  cg.addColorStop(0, `rgba(255,255,255,${.85 + energy * .15})`);
+  cg.addColorStop(.35, `hsla(${hue},100%,85%,.5)`);
+  cg.addColorStop(1, `hsla(${hue},100%,70%,0)`);
+  ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, R * .62, 0, 6.283); ctx.fill();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ============================================================
+   UI helpers
+   ============================================================ */
+const statusEl = $('#status'), heardEl = $('#heard'), capEl = $('#caption'), capSpan = $('#caption span'), pill = $('#pill');
+function labelFor(s) {
+  if (s === 'asleep') return 'TAP TO START';
+  if (s === 'listening') return cfg.needWake ? `SAY “${cfg.wake.toUpperCase()}”` : 'LISTENING';
+  if (s === 'thinking') return 'THINKING';
+  return 'SPEAKING';
+}
+function setState(s) { state = s; statusEl.textContent = labelFor(s); if (s === 'listening') bump = Math.max(bump, .5); }
+let capT;
+function caption(text, hold = 9000) {
+  clearTimeout(capT);
+  capSpan.textContent = text; capEl.classList.add('show');
+  capT = setTimeout(() => capEl.classList.remove('show'), hold);
+}
+function heard(txt) { heardEl.textContent = txt ? '“' + txt + '”' : ''; }
+let pillT;
+function showPill(url, label) {
+  pill.textContent = label; pill.href = url; pill.classList.add('show');
+  clearTimeout(pillT); pillT = setTimeout(() => pill.classList.remove('show'), 12000);
+}
+pill.addEventListener('click', () => setTimeout(() => pill.classList.remove('show'), 300));
+
+/* ============================================================
+   LAUNCHING APPS & SITES (automatic, no confirmation from us)
+   ============================================================ */
+function launch(url, label) {
+  caption(label, 6000);
+  const web = /^https?:/i.test(url);
+  if (web) {
+    let w = null;
+    try { w = window.open(url, '_blank'); } catch {}
+    if (!w) { try { location.href = url; } catch {} }
+  } else {
+    try { location.href = url; } catch {}
+  }
+  // if iOS blocked the automatic jump, we are still on screen a moment later → offer a one-tap button
+  setTimeout(() => { if (!document.hidden) showPill(url, 'Tap to open · ' + label); }, 1500);
+}
+
+const APPS = {
+  'spotify': 'spotify:', 'youtube': 'youtube://', 'apple music': 'music://', 'music': 'music://',
+  'maps': 'maps://', 'apple maps': 'maps://', 'google maps': 'comgooglemaps://',
+  'messages': 'sms:', 'texts': 'sms:', 'imessage': 'sms:', 'phone': 'tel:', 'facetime': 'facetime:',
+  'mail': 'mailto:', 'email': 'mailto:', 'notes': 'mobilenotes://', 'calendar': 'calshow://',
+  'instagram': 'instagram://', 'twitter': 'twitter://', 'x': 'twitter://', 'whatsapp': 'whatsapp://',
+  'netflix': 'nflx://', 'reddit': 'reddit://', 'discord': 'discord://', 'telegram': 'tg://',
+  'slack': 'slack://', 'uber': 'uber://', 'shortcuts': 'shortcuts://', 'snapchat': 'snapchat://', 'tiktok': 'snssdk1233://'
+};
+const SITES = { 'google': 'google.com', 'gmail': 'mail.google.com', 'amazon': 'amazon.com', 'wikipedia': 'wikipedia.org',
+  'facebook': 'facebook.com', 'linkedin': 'linkedin.com', 'github': 'github.com', 'chatgpt': 'chatgpt.com', 'claude': 'claude.ai' };
+
+function asDomain(s) {
+  let d = s.replace(/\s+dot\s+/g, '.').replace(/\s*\.\s*/g, '.').replace(/^www\./, '').trim();
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/.test(d)) return d;
+  return null;
+}
+function play(plat, q) {
+  const e = encodeURIComponent(q);
+  if (plat === 'youtube') return { open: `youtube://www.youtube.com/results?search_query=${e}`, label: 'YouTube · ' + q };
+  if (plat === 'apple music') return { open: `music://music.apple.com/search?term=${e}`, label: 'Apple Music · ' + q };
+  return { open: `spotify:search:${e}`, label: 'Spotify · ' + q };
+}
+
+/* local fast path; returns null when the brain (Claude) should handle it */
+function parse(t) {
+  let m;
+  if (/^(stop listening|go to sleep|sleep|good ?night|that'?s all|never ?mind)$/.test(t)) return { sleep: true };
+  if (/^(what time is it|what'?s the time|what is the time|time)$/.test(t)) return { say: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) };
+  if (/^(what'?s the date|what is the date|what day is it|what'?s today'?s date)$/.test(t)) return { say: new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) };
+
+  if ((m = t.match(/^open (spotify|youtube|apple music)(?: and)? (?:search|play|find|look up)(?: for)? (.+)$/))) return play(m[1], m[2]);
+  if ((m = t.match(/^(?:play|put on|listen to|queue up)\s+(.+)$/))) {
+    let q = m[1], plat = 'spotify', p;
+    if ((p = q.match(/^(.*?)\s+(?:on|in|using|with)\s+(spotify|youtube|apple music)$/))) { q = p[1]; plat = p[2]; }
+    return play(plat, q);
+  }
+  if ((m = t.match(/^(?:search|find|look up)\s+(?:for\s+)?(.+?)\s+(?:on|in)\s+(spotify|youtube|apple music)$/))) return play(m[2], m[1]);
+  if ((m = t.match(/^(?:search|find)\s+(?:for\s+)?(.+?)\s+on\s+(?:google|the web)$/)) || (m = t.match(/^google\s+(.+)$/)))
+    return { open: 'https://www.google.com/search?q=' + encodeURIComponent(m[1]), label: 'Google · ' + m[1] };
+
+  if ((m = t.match(/^(?:open|launch|start|go to|pull up|take me to)\s+(.+)$/))) {
+    const target = m[1].replace(/^the\s+/, '').replace(/\s+(?:app|website|site)$/, '').trim();
+    const dom = asDomain(target);
+    if (dom) return { open: 'https://' + dom, label: dom };
+    if (APPS[target]) return { open: APPS[target], label: target };
+    if (SITES[target]) return { open: 'https://' + SITES[target], label: SITES[target] };
+    if (!/^take me to/.test(t) && !KEY()) { const g = target.replace(/\s+/g, ''); return { open: `https://${g}.com`, label: g + '.com' }; }
+  }
+  if ((m = t.match(/^(?:directions to|navigate to|take me to|get me to|how do i get to)\s+(.+)$/)))
+    return { open: `maps://?daddr=${encodeURIComponent(m[1])}&dirflg=d`, label: 'Directions · ' + m[1] };
+  if ((m = t.match(/^(?:call|dial|phone)\s+([\d\s\-+()]{7,})$/))) return { open: 'tel:' + m[1].replace(/[^\d+]/g, ''), label: 'Calling ' + m[1].trim() };
+  return null;
+}
+
+/* ============================================================
+   BRAIN (Claude)
+   ============================================================ */
+const history = [];
+async function askGemini(text) {
+  history.push({ role: 'user', content: text });
+  const sys = `You are Nova, a voice assistant living on the user's iPhone. Right now it is ${new Date().toLocaleString()}. Answer anything the user asks the way a brilliant, warm friend would say it out loud: concise, natural, 1-3 sentences unless they ask for more detail. No markdown, no lists, no emojis, no URLs read aloud. You have Google Search available, so use it for anything that needs current or live information (news, scores, weather, prices).
+You can also launch apps and websites instantly. Reply with ONLY a JSON object: {"say": string, "open": string|null}. "open" is a URL that opens automatically. Use native app URL schemes so real apps open: Spotify search spotify:search:<urlencoded query>; Apple Music music://music.apple.com/search?term=<q>; YouTube youtube://www.youtube.com/results?search_query=<q>; Apple Maps directions maps://?daddr=<place>&dirflg=d; Google Maps comgooglemaps://?q=<q>; Messages sms:; Phone tel:<digits>; FaceTime facetime:<number>; Mail mailto:; Notes mobilenotes://; Calendar calshow://; Instagram instagram://; X twitter://; WhatsApp whatsapp://; Netflix nflx://; Reddit reddit://; Discord discord://; Telegram tg://; Slack slack://; Uber uber://; Shortcuts shortcuts://. For websites use a full https URL. If nothing should open, set "open" to null. When you open something, "say" should be only a few words.`;
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const contents = history.slice(-11).map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    const call = withSearch => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': KEY() },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents,
+        ...(withSearch ? { tools: [{ google_search: {} }] } : {}),
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
+      })
+    });
+    let r = await call(true);
+    if (!r.ok) r = await call(false);          // fall back to no live search if the tool is rejected
+    const data = await r.json();
+    if (!r.ok) { history.pop(); throw new Error(data.error?.message || ('HTTP ' + r.status)); }
+    const out = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+    if (!out) { history.pop(); throw new Error('empty reply'); }
+    history.push({ role: 'assistant', content: out });
+    let obj;
+    try { obj = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1)); } catch { obj = { say: out, open: null }; }
+    return { say: obj.say || '', open: obj.open || null };
+  } finally { clearTimeout(to); }
+}
+
+/* ============================================================
+   SPEECH OUT
+   ============================================================ */
+function pickVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const vs = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+  return vs.find(v => /premium|enhanced/i.test(v.name)) || vs.find(v => /samantha|ava|allison|evan|nicky/i.test(v.name)) || vs[0] || null;
+}
+function speak(text, done) {
+  caption(text, Math.max(7000, text.length * 90));
+  if (!cfg.voice || !('speechSynthesis' in window)) { setState('speaking'); setTimeout(done, Math.min(5000, 900 + text.length * 40)); return; }
+  try { speechSynthesis.cancel(); } catch {}
+  setState('speaking');
+  const u = new SpeechSynthesisUtterance(text);
+  const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = 1.03; u.pitch = 1;
+  let fin = false, guard;
+  const end = () => { if (fin) return; fin = true; clearTimeout(guard); done(); };
+  u.onend = end; u.onerror = end;
+  guard = setTimeout(end, 90000);
+  speechSynthesis.speak(u);
+}
+let ttsUnlocked = false;
+function unlockTTS() {
+  if (ttsUnlocked || !('speechSynthesis' in window)) return;
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); ttsUnlocked = true; } catch {}
+}
+
+/* ============================================================
+   LISTENING LOOP
+   ============================================================ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, active = false, paused = false, cur = '', silenceT, restartT, wakeLock = null;
+
+async function keepAwake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
+function releaseAwake() { try { wakeLock && wakeLock.release(); } catch {} wakeLock = null; }
+
+function stopRec() {
+  clearTimeout(silenceT); clearTimeout(restartT);
+  if (rec) { rec.onend = rec.onresult = rec.onerror = rec.onstart = null; try { rec.abort(); } catch {} rec = null; }
+}
+
+function startRec() {
+  if (!SR) { caption('Speech recognition isn’t available here. Open Nova from the home screen in Safari on iOS.'); return; }
+  if (!active || paused) return;
+  stopRec();
+  rec = new SR();
+  rec.continuous = true; rec.interimResults = true; rec.lang = navigator.language || 'en-US';
+  cur = '';
+  rec.onstart = () => { if (!paused) setState('listening'); };
+  rec.onresult = e => {
+    if (paused) return;
+    let txt = '', fin = false;
+    for (let i = 0; i < e.results.length; i++) { txt += e.results[i][0].transcript; if (i === e.results.length - 1) fin = e.results[i].isFinal; }
+    cur = txt.trim(); if (!cur) return;
+    heard(cur); bump = 1;
+    clearTimeout(silenceT); silenceT = setTimeout(commit, fin ? 250 : 1150);
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      active = false; stopRec(); setState('asleep');
+      caption('Allow Microphone and Speech Recognition for Nova in iOS Settings, then tap the orb.', 12000);
+    }
+  };
+  rec.onend = () => { if (active && !paused) { clearTimeout(restartT); restartT = setTimeout(startRec, 350); } };
+  try { rec.start(); } catch { restartT = setTimeout(startRec, 700); }
+}
+
+function resume() {          // back to listening after an action
+  paused = false;
+  if (active) { setState('listening'); startRec(); } else setState('asleep');
+}
+
+function commit() {
+  const text = cur; cur = ''; heard('');
+  if (!text) return;
+  stopRec();
+  paused = true;
+  route(text);
+}
+
+async function route(raw) {
+  let text = raw.trim();
+  if (cfg.needWake) {
+    const i = text.toLowerCase().indexOf(cfg.wake.toLowerCase());
+    if (i === -1) { resume(); return; }
+    text = text.slice(i + cfg.wake.length).replace(/^[\s,.:!?-]+/, '');
+    if (!text) { speak('Yes?', resume); return; }
+  }
+  const t = text.toLowerCase().replace(/[.!?,]+$/g, '').replace(/\s+/g, ' ').trim();
+  heard(text);
+  setTimeout(() => heard(''), 1200);
+
+  const r = parse(t);
+  if (r?.sleep) { speak('Okay. Tap me when you need me.', () => { sleepNow(); }); return; }
+  if (r?.open) { launch(r.open, r.label); setTimeout(resume, 2500); return; }
+  if (r?.say) { speak(r.say, resume); return; }
+
+  if (!KEY()) {
+    speak('I need a Gemini API key to answer questions. I can still open apps, play music, and open websites.', resume);
+    return;
+  }
+  setState('thinking');
+  try {
+    const a = await askGemini(text);
+    if (a.open) { launch(a.open, a.say || 'Opening'); setTimeout(resume, 2500); }
+    else if (a.say) speak(a.say, resume);
+    else resume();
+  } catch (e) {
+    speak(e.name === 'AbortError' ? 'That took too long. Try again.' : 'Sorry, something went wrong. ' + String(e.message || '').slice(0, 90), resume);
+  }
+}
+
+function wakeUp() {
+  unlockTTS(); active = true; paused = false; keepAwake(); setState('listening'); startRec();
+}
+function sleepNow() { active = false; paused = false; stopRec(); releaseAwake(); try { speechSynthesis.cancel(); } catch {} heard(''); setState('asleep'); }
+
+cv.addEventListener('pointerdown', () => {
+  unlockTTS();
+  if (state === 'speaking') { try { speechSynthesis.cancel(); } catch {} return; }
+  if (state === 'thinking') return;
+  if (!active) wakeUp(); else sleepNow();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    pill.classList.remove('show');
+    if (active) { paused = false; keepAwake(); setState('listening'); startRec(); }
+  }
+});
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+const sheet = $('#sheet');
+$('#gear').addEventListener('click', e => {
+  e.stopPropagation();
+  $('#key').value = cfg.key; $('#voice').checked = cfg.voice; $('#needWake').checked = cfg.needWake; $('#wake').value = cfg.wake;
+  sheet.classList.add('open');
+});
+$('#done').addEventListener('click', () => {
+  cfg.key = $('#key').value.trim(); cfg.voice = $('#voice').checked; cfg.needWake = $('#needWake').checked;
+  cfg.wake = ($('#wake').value || 'nova').trim().toLowerCase();
+  for (const k of Object.keys(cfg)) store.set(k, cfg[k]);
+  sheet.classList.remove('open'); statusEl.textContent = labelFor(state);
+});
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
+</script>
+</body>
+</html>
